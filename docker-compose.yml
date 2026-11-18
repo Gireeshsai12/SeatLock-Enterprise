@@ -1,0 +1,83 @@
+name: seatlock-enterprise
+x-backend-env: &backend-env
+  DB_URL: jdbc:postgresql://db:5432/seatlock
+  DB_USER: seatlock
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?Run the included startup script first}
+  JWT_SECRET: ${JWT_SECRET:?Run the included startup script first}
+  DEMO_MODE: ${DEMO_MODE:-true}
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_RABBITMQ_HOST: rabbit
+  SPRING_RABBITMQ_USERNAME: seatlock
+  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Run the included startup script first}
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: seatlock
+      POSTGRES_USER: seatlock
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the included startup script first}
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U seatlock -d seatlock"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+  rabbit:
+    image: rabbitmq:4.1-alpine
+    hostname: rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: seatlock
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run the included startup script first}
+    volumes: [rabbit:/var/lib/rabbitmq]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  api:
+    build: ./backend
+    image: seatlock-core:local
+    environment:
+      <<: *backend-env
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run the included startup script first}
+      AUTH_RATE_LIMIT: "true"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8081; printf \"GET /actuator/health/readiness HTTP/1.0\\r\\n\\r\\n\" >&3; read -r line <&3; [[ $$line == *\" 200 \"* ]]'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: on-failure
+  worker:
+    image: seatlock-core:local
+    pull_policy: never
+    environment:
+      <<: *backend-env
+      WORKER_MODE: "true"
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+      NOTIFICATION_TRANSPORT: rabbit
+    depends_on:
+      api: {condition: service_healthy}
+      rabbit: {condition: service_healthy}
+    restart: on-failure
+  web:
+    build: ./frontend
+    image: seatlock-web:local
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api: {condition: service_healthy, restart: true}
+    restart: on-failure
+volumes:
+  postgres:
+  rabbit:

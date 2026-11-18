@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "SeatLock Enterprise regression",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8080"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Application health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/actuator/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Health is UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seeded events",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/events?category=CONCERT"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Seeded concert is visible\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().some(row => row.title === \"Midnight Jazz Sessions\")).to.be.true; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reject invalid pagination",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/events?size=0"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Invalid page is rejected\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Register buyer",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"buyer-{{$guid}}@example.test\", \"password\": \"Demo-{{$guid}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Customer registered\", () => { pm.response.to.have.status(201); pm.collectionVariables.set(\"accessToken\", pm.response.json().accessToken); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Require administrator",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/admin/analytics",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Customer is forbidden\", () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Load authenticated history",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/reservations",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"New customer history is empty\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.length(0); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

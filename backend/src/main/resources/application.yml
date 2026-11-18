@@ -1,0 +1,43 @@
+spring:
+  application.name: seatlock
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/seatlock}
+    username: ${DB_USER:seatlock}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate.ddl-auto: validate
+  jackson.serialization.write-dates-as-timestamps: false
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener.simple:
+      default-requeue-rejected: false
+      retry:
+        enabled: true
+        max-attempts: 5
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 16s
+  mail:
+    properties:
+      mail.smtp.connectiontimeout: 4000
+      mail.smtp.timeout: 4000
+      mail.smtp.writetimeout: 4000
+management:
+  endpoints.web.exposure.include: health,info,metrics
+  endpoint.health.probes.enabled: true
+  health:
+    redis.enabled: false
+    rabbit.enabled: false
+server:
+  forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:none}
+  port: ${PORT:8081}
+  error.include-message: never
+seatlock:
+  jwt-secret: ${JWT_SECRET:}
+  demo: ${DEMO_MODE:true}
+  worker: ${WORKER_MODE:false}
+  notifications: ${NOTIFICATION_TRANSPORT:database}
+  hold-seconds: ${HOLD_SECONDS:300}
+  smtp-from: ${SMTP_FROM:}

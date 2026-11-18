@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Service
+metadata: {name: db}
+spec:
+  selector: {app: db}
+  ports: [{port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: db}
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels: {app: db}
+  template:
+    metadata:
+      labels: {app: db}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - {name: POSTGRES_DB, value: seatlock}
+            - {name: POSTGRES_USER, value: seatlock}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: seatlock-secrets, key: DB_PASSWORD}
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, seatlock, -d, seatlock]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: rabbit}
+spec:
+  selector: {app: rabbit}
+  ports: [{port: 5672}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: rabbit}
+spec:
+  serviceName: rabbit
+  replicas: 1
+  selector:
+    matchLabels: {app: rabbit}
+  template:
+    metadata:
+      labels: {app: rabbit}
+    spec:
+      containers:
+        - name: rabbit
+          image: rabbitmq:4.1-alpine
+          env:
+            - {name: RABBITMQ_DEFAULT_USER, value: seatlock}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef: {name: seatlock-secrets, key: SPRING_RABBITMQ_PASSWORD}
+          readinessProbe:
+            exec:
+              command: [rabbitmq-diagnostics, -q, ping]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/rabbitmq}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: redis}
+spec:
+  selector: {app: redis}
+  ports: [{port: 6379}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: redis}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: redis}
+  template:
+    metadata:
+      labels: {app: redis}
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          readinessProbe:
+            exec:
+              command: [redis-cli, ping]
